@@ -5,7 +5,6 @@
 #include "compiler.h"
 //#include "i2c-ifce.h"
 #include "interface.h"
-#include "lvgl.h"
 
 cell version_adr(void)
 {
@@ -145,7 +144,6 @@ cell lv_scr_act1(void)
 }
 
 cell ((* const ccalls[])()) = {
-	C(lv_scr_act1)			//c lvscr-act		{ -- i.screen }
 	C(build_date_adr)       //c 'build-date     { -- a.value }
 	C(version_adr)          //c 'version        { -- a.value }
 	C(ms)                   //c ms              { i.ms -- }
