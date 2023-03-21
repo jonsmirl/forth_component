@@ -138,11 +138,6 @@ static void repeat_alarm(uint32_t ms, xt_t xt)
     repeat_alarm_us((uint64_t)ms * 1000, xt);
 }
 
-cell lv_scr_act1(void)
-{
-  return (cell)lv_scr_act();
-}
-
 cell ((* const ccalls[])()) = {
 	C(build_date_adr)       //c 'build-date     { -- a.value }
 	C(version_adr)          //c 'version        { -- a.value }
