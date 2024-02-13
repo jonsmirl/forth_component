@@ -12,13 +12,12 @@ typedef int cell;
 #include "esp_event_loop.h"
 #include "esp_log.h"
 #include "esp_event.h"
-#include "nvs_flash.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "lwip/netdb.h"
 
-#include "driver/uart.h"
+static const char *TAG = "interface";
 
 // The following routines are used by Forth to invoke functions
 // defined by the SDK.  The call signatures should be based on
@@ -34,36 +33,18 @@ typedef int cell;
 // want a non-blocking key?, and there is no easy way to do so with
 // getchar().
 
-#define BUF_SIZE (1024)
-void init_uart(void)
-{
-    int uart_num = UART_NUM_0;
-
-    uart_config_t uart_config = {
-       .baud_rate = 115200,
-       .data_bits = UART_DATA_8_BITS,
-       .parity = UART_PARITY_DISABLE,
-       .stop_bits = UART_STOP_BITS_1,
-       .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-       .rx_flow_ctrl_thresh = 122,
-    };
-    uart_param_config(uart_num, &uart_config);
-
-    // No need to set the pins as the defaults are correct for UART0
-
-    // Install driver with a receive buffer but no transmit buffer
-    // and no event queue.
-    uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0);
-}
-
 void raw_emit(unsigned char c)
 {
-    uart_write_bytes(0, &c, 1);
+    write(fileno(stdout), &c, 1);
+    //fflush(stdout);
+    fsync(fileno(stdout));
 }
 
 int raw_poll(unsigned char *c)
 {
-    return uart_read_bytes(0, c, 1, 0);
+    int count;
+    count = read( fileno(stdin), c, 1);
+    return count;
 }
 
 // Routines for the ccalls[] table in textend.c.  Add new ones
@@ -104,7 +85,7 @@ void i2c_close()
 
 #define I2C_FINISH \
     i2c_master_stop(cmd); \
-    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM, cmd, 1000 / portTICK_RATE_MS); \
+    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM, cmd, 1000 / portTICK_PERIOD_MS); \
     i2c_cmd_link_delete(cmd);
 
 int i2c_write_read(uint8_t stop, uint8_t slave, uint8_t rsize, uint8_t *rbuf, uint8_t wsize, uint8_t *wbuf)
@@ -121,14 +102,14 @@ int i2c_write_read(uint8_t stop, uint8_t slave, uint8_t rsize, uint8_t *rbuf, ui
 	i2c_master_write(cmd, wbuf, wsize, ACK_CHECK);
 	if (!rsize) {
     i2c_master_stop(cmd); \
-    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM, cmd, 1000 / portTICK_RATE_MS); \
+    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM, cmd, 1000 / portTICK_PERIOD_MS); \
     i2c_cmd_link_delete(cmd);
 //	    I2C_FINISH;
 	    return ret;
 	}
 	if (stop) { // rsize is nonzero
     i2c_master_stop(cmd); \
-    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM, cmd, 1000 / portTICK_RATE_MS); \
+    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM, cmd, 1000 / portTICK_PERIOD_MS); \
     i2c_cmd_link_delete(cmd);
 //	    I2C_FINISH;
 	    if (ret)
@@ -265,45 +246,6 @@ static EventGroupHandle_t wifi_event_group;
    to the AP with an IP? */
 const int CONNECTED_BIT = BIT0;
 
-static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
-{
-    switch(event->event_id) {
-    case SYSTEM_EVENT_STA_START:
-        esp_wifi_connect();
-        break;
-    case SYSTEM_EVENT_STA_GOT_IP:
-        xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
-        break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-        /* This is a workaround as ESP32 WiFi libs don't currently
-           auto-reassociate. */
-        esp_wifi_connect();
-        xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
-        break;
-    default:
-        break;
-    }
-    return ESP_OK;
-}
-
-cell wifi_open(cell timeout, char *password, char *ssid)
-{
-    tcpip_adapter_init();
-    wifi_event_group = xEventGroupCreate();
-    if (esp_event_loop_init(wifi_event_handler, NULL)) return -1;
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    if (esp_wifi_init(&cfg) ) return -2;
-    if (esp_wifi_set_storage(WIFI_STORAGE_RAM)) return -3;
-    wifi_config_t wifi_config = { };
-    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
-    strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
-    if(esp_wifi_set_mode(WIFI_MODE_STA)) return -4;
-    if(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config)) return -5;
-    if(esp_wifi_start()) return -6;
-    if (xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT, false, true, timeout) != CONNECTED_BIT) return -7;
-    return 0;
-}
-
 cell get_wifi_mode(void)
 {
     wifi_mode_t mode;
@@ -407,18 +349,6 @@ cell my_select(cell maxfdp1, void *reads, void *writes, void *excepts, cell msec
     return (cell)lwip_select((int)maxfdp1, (fd_set *)reads, (fd_set *)writes, (fd_set *)excepts, &to);
 }
 
-cell dhcpc_status(void)
-{
-    tcpip_adapter_dhcp_status_t status;
-    tcpip_adapter_dhcpc_get_status(TCPIP_ADAPTER_IF_STA, &status);
-    return status;
-}
-
-void ip_info(void *buf)
-{
-    tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, (tcpip_adapter_ip_info_t *)buf);
-}
-
 cell my_lwip_write(cell handle, cell len, void *adr)
 {
     return (cell)lwip_write((int)handle, adr, (size_t)len);
@@ -432,14 +362,11 @@ cell my_lwip_read(cell handle, cell len, void *adr)
 #include <errno.h>
 #include <sys/fcntl.h>
 #include "esp_vfs.h"
-#include "esp_vfs_fat.h"
 #include "esp_log.h"
-#include "spiffs_vfs.h"
 
 void init_filesystem(void)
 {
     esp_log_level_set("[SPIFFS]", 0);
-    vfs_spiffs_register();
 }
 
 char *expand_path(char *name)
@@ -492,9 +419,7 @@ void rename_file(char *new, char *old)
 
 cell fs_avail(void)
 {
-  u32_t total, used;
-  spiffs_fs_stat(&total, &used);
-  return (cell)(total - used);
+  return 0;
 }
 
 void delete_file(char *name)

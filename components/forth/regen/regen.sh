@@ -3,4 +3,5 @@
 ./makebi app.dic
 cp *.h ..
 rm *.h
-
+rm app.dic
+rm tccalls.fth

@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-char *ecvt(double n, int ndigits, int *decpt, int *sign);
+unsigned char *ecvt(double n, int ndigits, int *decpt, int *sign);
 char *fcvt(double n, int ndigits, int *decpt, int *sign);
 
 #ifdef NeXT
@@ -233,7 +233,7 @@ fintop(int op, cell *sp, cell *up)
 		} else {
 			int decpt, sign;
 			int places = (int)V(FNUMPLACES);
-			char *digits = ecvt(ftos, places+1, &decpt, &sign);
+			unsigned char *digits = ecvt(ftos, places+1, &decpt, &sign);
 			char *s = floatstr;
 			if (sign)
 				*s++ = '-';
@@ -310,7 +310,7 @@ fintop(int op, cell *sp, cell *up)
 		{
 		    int len = *sp++;
 		    char *adr = (char *)(*sp++);
-		    char *radr;
+		    unsigned char *radr;
 		    int decpt, sign;
 
 		    radr = ecvt(ftos, len, &decpt, &sign);

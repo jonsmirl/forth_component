@@ -9,8 +9,11 @@
 #include <stdint.h>
 #include "forth.h"
 #include "string.h"
+#include <esp_log.h>
 
 #include "compiler.h"
+
+static const char *TAG = "forth";
 
 #define binop(operator)  (tos = *sp++ operator tos)
 #define loadtos          tos = *sp++
@@ -476,6 +479,7 @@ execute:
     scr = pop;
     ascr = (u_char *)pop;
     scr = caccept((char *)ascr, scr, up);
+    ESP_LOGI(TAG, "SYS_ACCEPT %s", ascr);
     if (scr == -2) {
         // Save interpreter state, return, and expect reentry
         // to inner_interpreter() upon a later callback

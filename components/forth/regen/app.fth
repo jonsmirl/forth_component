@@ -5,6 +5,7 @@ fl dl.fth
 fl random.fth
 fl ilog2.fth
 fl tek.fth
+fl stringar.fth
 
 warning @ warning off
 : bye standalone?  if  restart  then  bye  ;
@@ -31,8 +32,6 @@ alias m-init noop
 alias get-ticks get-msecs
 : ms>ticks  ( ms -- ticks )  ;
 
-fl wifi.fth
-
 fl xmifce.fth
 fl crc16.fth
 fl xmodem.fth
@@ -42,7 +41,6 @@ previous
 
 fl files.fth
 
-fl server.fth
 
 \ Replace 'quit' to make CForth auto-run some application code
 \ instead of just going interactive.

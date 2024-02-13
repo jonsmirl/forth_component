@@ -5,10 +5,15 @@
 #include "forth.h"
 #include "compiler.h"
 #include "stdlib.h"
+#include "lvgl.h"
+#include "linenoise/linenoise.h"
+#include "sforth.h"
+#include "esp_log.h"
+
+static const char *TAG = "extend";
 
 extern void raw_emit(unsigned char c);
 extern int raw_poll(unsigned char *c);
-extern void init_uart(void);
 extern void init_filesystem(void);
 
 int isinteractive() {  return (1);  }
@@ -35,7 +40,7 @@ int key_avail(cell *up)
     if (key_is_avail) {
         return (cell)-1;
     }
-    if(raw_poll(&the_key)) {
+    if(raw_poll(&the_key) > 0) {
         key_is_avail = 1;
         return (cell)-1;
     }
@@ -53,7 +58,7 @@ int key(cell *up)
 void init_io(int argc, char **argv, cell *up)
 {
   key_is_avail = 0;
-  init_uart();
+  setbuf(stdout, NULL);
   init_filesystem();
 }
 

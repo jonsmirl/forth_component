@@ -1,10 +1,15 @@
 // Forth interfaces to platform-specific C routines
 // See "ccalls" below.
 
+#include <lvgl.h>
+#include <esp_log.h>
 #include "forth.h"
 #include "compiler.h"
 //#include "i2c-ifce.h"
 #include "interface.h"
+#include "sforth.h"
+
+static const char *TAG = "extend";
 
 cell version_adr(void)
 {
@@ -38,11 +43,6 @@ cell errno_val(void) {  return (cell)errno;  }
 extern void software_reset(void);
 extern void ms(void);
 
-extern void adc1_config_width(void);
-extern void adc1_config_channel_atten(void);
-extern void adc1_get_voltage(void);
-extern void hall_sensor_read(void){};
-
 extern void mcpwm_gpio_init(void);
 extern void mcpwm_init(void);
 extern void mcpwm_set_frequency(void);
@@ -54,7 +54,6 @@ extern void mcpwm_set_signal_low(void);
 extern void mcpwm_start(void);
 extern void mcpwm_stop(void);
 
-int xTaskGetTickCount(void);
 void raw_emit(char c);
 
 #define ALARM_DATA_CELLS 100
@@ -138,17 +137,41 @@ static void repeat_alarm(uint32_t ms, xt_t xt)
     repeat_alarm_us((uint64_t)ms * 1000, xt);
 }
 
+static lv_style_t *get_style(struct forth_page_t *page, unsigned int index) 
+{
+	if (index < NUMBER_STYLES)
+		return &page->styles[index];
+	return NULL;
+}
+
 cell ((* const ccalls[])()) = {
+	C(lv_scr_act)			//c lv_scr_act		{ -- i.screen }
+	C(lv_scr_load)			//c lv_scr_load		{ i.screen -- }
+	C(lv_obj_create)		//c lv_obj_create	{ i.parent -- i.object }
+	C(lv_obj_set_pos)		//c lv_obj_set_pos	{ i.y i.x i.object -- }
+	C(lv_obj_set_size)		//c lv_obj_set_size	{ i.h i.w i.object -- }
+	C(lv_obj_set_width)		//c lv_obj_set_width { i.w i.object -- }
+	C(lv_obj_set_user_data) //c lv_obj_set_user_data { i.user_data i.object -- }
+	C(lv_obj_align)			//c lv_obj_align	{ i.y i.x i.align i.object -- }
+	C(lv_obj_center)		//c lv_obj_center	{ i.object -- }
+	C(lv_obj_add_style)		//c lv_obj_add_style { i.selector i.style i.object -- }
+	C(lv_obj_add_event_cb)	//c lv_obj_add_event_cb { i.user_data i.filter i.event_cb i.object -- i.desc }
+	C(lv_btn_create)		//c lv_btn_create	{ i.parent -- i.button }
+	C(lv_label_create)		//c lv_label_create	{ i.parent -- i.label }
+	C(lv_label_set_text)	//c lv_label_set_text { $text i.label -- }
+	C(lv_label_set_long_mode) //c lv_label_set_long_mode { i.mode i.label -- }
+	C(get_style)			//c get_style 		{ i.index i.page -- i.style }
+	C(lv_style_init)		//c lv_style_init 	{ i.style -- }
+	C(lv_style_set_bg_opa)	//c lv_style_set_bg_opa { i.opa i.style -- }
+	C(lv_style_set_bg_color) //c lv_style_set_bg_color { i.color i.style -- }
+	C(lv_style_set_border_width) //c lv_style_set_border_width { i.width i.style -- }
+	C(lv_style_set_border_color) //c lv_style_set_border_color { i.color i.style -- }
+	
 	C(build_date_adr)       //c 'build-date     { -- a.value }
 	C(version_adr)          //c 'version        { -- a.value }
 	C(ms)                   //c ms              { i.ms -- }
 	C(xTaskGetTickCount)    //c get-msecs       { -- i.ms }
 	C(software_reset)       //c restart         { -- }
-
-	C(adc1_config_width)    //c adc-width!  { i.width -- }
-	C(adc1_config_channel_atten)  //c adc-atten!  { i.attenuation i.channel# -- }
-	C(adc1_get_voltage)     //c adc@        { i.channel# -- i.voltage }
-	C(hall_sensor_read)     //c hall@       { -- i.voltage }
 
 	C(i2c_open)		//c i2c-open  { i.scl i.sda -- i.error? }
 	C(i2c_close)		//c i2c-close  { -- }
@@ -171,7 +194,6 @@ cell ((* const ccalls[])()) = {
 	C(gpio_mode)    	//c gpio-mode { i.pullup? i.direction i.gpio# -- }
 
 	C(get_wifi_mode)	//c wifi-mode@ { -- i.mode }
-	C(wifi_open)		//c wifi-open { $ssid $password i.timeout -- i.error? }
 
 	C(set_log_level)	//c log-level! { i.level $component -- }
 
@@ -191,11 +213,8 @@ cell ((* const ccalls[])()) = {
 	C(lwip_listen)		//c lwip-listen    { i.backlog i.handle -- i.handle }
 	C(lwip_accept)		//c lwip-accept    { a.addrlen a.addr i.handle -- i.error }
 	C(start_server)		//c start-server   { i.port -- i.error }
-	C(dhcpc_status)		//c dhcp-status    { -- i.status }
-	C(ip_info)		//c ip-info        { a.info -- }
 
 	C(my_select)		//c lwip-select    { i.sec a.exc a.wr a.rd i.n -- i.cnt }
-	C(tcpip_adapter_get_ip_info) //c ip-info@  { a.buf i.adapter# -- i.error }
 
 	C(open_dir)		//c open-dir       { -- a.dir }
 	C(closedir)		//c close-dir      { a.dir -- }
